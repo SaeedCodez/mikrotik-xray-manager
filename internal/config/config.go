@@ -19,6 +19,7 @@ type Config struct {
 	XrayConfigPath   string // XRAY_CONFIG_PATH
 	InboundSocks     int    // XRAY_INBOUND_PORT
 	InboundHTTP      int    // XRAY_INBOUND_HTTP_PORT
+	HealthTestURL    string // HEALTH_TEST_URL — probed through the proxy for real delay
 	SessionSecret    []byte // SESSION_SECRET
 	sessionEphemeral bool
 }
@@ -33,6 +34,7 @@ func Load() *Config {
 		XrayConfigPath: os.Getenv("XRAY_CONFIG_PATH"),
 		InboundSocks:   envInt("XRAY_INBOUND_PORT", 10808),
 		InboundHTTP:    envInt("XRAY_INBOUND_HTTP_PORT", 10809),
+		HealthTestURL:  envStr("HEALTH_TEST_URL", "http://www.gstatic.com/generate_204"),
 	}
 
 	if c.XrayConfigPath == "" {

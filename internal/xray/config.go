@@ -51,6 +51,34 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
+// BuildTestConfig generates a minimal config that routes a single HTTP inbound
+// (127.0.0.1:httpPort) through p — used to probe real latency through the proxy
+// without disturbing the main running instance. It is a plain function so the
+// health package can depend on it without importing a Manager.
+func BuildTestConfig(p *models.Proxy, httpPort int) ([]byte, error) {
+	outbound, err := proxyToOutbound(p)
+	if err != nil {
+		return nil, err
+	}
+	cfg := M{
+		"log": M{"loglevel": "warning"},
+		"inbounds": []interface{}{
+			M{
+				"tag":      "http",
+				"port":     httpPort,
+				"listen":   "127.0.0.1",
+				"protocol": "http",
+			},
+		},
+		"outbounds": []interface{}{
+			outbound,
+			M{"tag": "direct", "protocol": "freedom"},
+			M{"tag": "block", "protocol": "blackhole"},
+		},
+	}
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
 // proxyToOutbound produces the Xray outbound object for a proxy's protocol.
 func proxyToOutbound(p *models.Proxy) (M, error) {
 	switch p.Protocol {

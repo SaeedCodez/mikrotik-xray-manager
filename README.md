@@ -20,7 +20,8 @@ into the binary, so deployment is "copy one file and run it."
 
 - **Proxies** — parse `vmess://`, `vless://`, `trojan://`, `ss://`, and
   `hy2://` / `hysteria2://` links. Search, expand for details, set active, test,
-  and delete. "Test all" streams latencies in live as each result lands.
+  and delete. Latency is a **real delay measured through the proxy** (not a TCP
+  ping). "Test all" streams results in live as each one lands.
 - **Subscriptions** — add a URL once, refresh to pull the latest proxies.
   Deleting a subscription lets you keep or remove its proxies. Failed refreshes
   are surfaced without dropping the proxies you already have.
@@ -71,6 +72,7 @@ All configuration is via environment variables (see `.env.example`):
 | `XRAY_CONFIG_PATH` | `$DATA_DIR/xray/config.json` | Where the active config is written. |
 | `XRAY_INBOUND_PORT` | `10808` | SOCKS5 inbound port xray listens on. |
 | `XRAY_INBOUND_HTTP_PORT` | `10809` | HTTP inbound port xray listens on. |
+| `HEALTH_TEST_URL` | `http://www.gstatic.com/generate_204` | URL fetched through each proxy to measure real delay. |
 | `SESSION_SECRET` | _(random)_ | Secret for signing session cookies. If unset, a random one is generated and sessions reset on restart. |
 
 ---
@@ -218,6 +220,10 @@ xray-manager/
   [Lucide](https://lucide.dev) icons (all via CDN, no build step). Styling is
   hand-written CSS built on the Ghab design tokens — the design is token-driven
   rather than utility-class driven, so it mirrors the hand-off exactly.
-- **Health checks** currently use a TCP connect ("ping") to the proxy endpoint,
-  which is fast and works for every protocol. A proxied real-delay test can be
-  layered on later without changing the API.
+- **Health checks measure real delay.** Each test spins up a short-lived xray
+  instance with that proxy as the outbound, fetches `HEALTH_TEST_URL`
+  (`http://www.gstatic.com/generate_204` by default) through it, and reports the
+  round-trip time — so the latency reflects the proxy actually working, not just
+  its port being reachable. If the xray binary isn't available, it falls back to
+  a TCP ping. (Real-delay tests take ~1–2s each, like v2rayN; the UI shows a
+  "testing…" spinner while they run.)

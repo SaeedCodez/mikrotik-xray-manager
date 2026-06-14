@@ -178,9 +178,10 @@ function xrayApp() {
         return { text: "untested", cls: "lat-untested" };
       if (p.latency < 0) return { text: "timeout", cls: "lat-bad" };
       const n = p.latency;
+      // good ≤400ms (green) · normal 401–700ms (amber) · slow >700ms (red)
       let cls = "lat-good";
-      if (n >= 280) cls = "lat-bad";
-      else if (n >= 120) cls = "lat-mid";
+      if (n > 700) cls = "lat-bad";
+      else if (n > 400) cls = "lat-mid";
       return { text: n + " ms", cls };
     },
 

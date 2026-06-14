@@ -18,7 +18,7 @@ func (a *App) TestProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "proxy not found")
 		return
 	}
-	res := health.Test(&p)
+	res := a.prober.Probe(&p)
 	a.persistLatency(id, res.Latency)
 	writeJSON(w, http.StatusOK, map[string]any{"latency": res.Latency, "error": res.Error})
 }
@@ -53,7 +53,7 @@ func (a *App) TestAll(w http.ResponseWriter, r *http.Request) {
 
 	proxies := a.store.Proxies()
 	results := make(chan health.Result, len(proxies))
-	go health.TestAll(proxies, 10, results)
+	go a.prober.TestAll(proxies, 8, results)
 
 	for res := range results {
 		a.persistLatency(res.ProxyID, res.Latency)
