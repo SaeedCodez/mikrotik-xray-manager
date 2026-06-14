@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF9F7">
+  <title>Xray Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script defer src="/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+</head>
+<body>
+<div class="app-shell" x-data="xrayApp()" x-cloak>
+
+  <!-- ============ LOGIN ============ -->
+  <template x-if="booted && !authenticated">
+    <div class="login-wrap">
+      <div class="login-inner">
+        <span class="login-mark"><i data-lucide="waypoints" class="icon"></i></span>
+        <div>
+          <div class="gh-eyebrow" style="margin-bottom:10px">PROXY CONTROL</div>
+          <h1 class="login-title">Xray Manager</h1>
+          <p class="login-sub">Sign in to manage and switch between your proxies.</p>
+        </div>
+        <div class="field" style="margin-top:4px">
+          <label class="field-label" for="pw">Password</label>
+          <div class="field-box">
+            <input id="pw" class="field-input" type="password" placeholder="Enter your password"
+                   x-model="pw" @keydown.enter="login()">
+          </div>
+          <span class="field-helper">Use the password set in <code>APP_PASSWORD</code>.</span>
+        </div>
+        <div style="width:100%">
+          <button class="btn btn-primary btn-lg btn-full" @click="login()">Unlock</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ============ APP ============ -->
+  <template x-if="booted && authenticated">
+    <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+
+      <!-- top bar -->
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-mark"><i data-lucide="waypoints" class="icon"></i></span>
+          <span class="brand-name">Xray Manager</span>
+        </div>
+        <div class="run-pill" :class="status.running ? 'is-running' : 'is-stopped'">
+          <span class="run-dot"></span>
+          <span x-text="runLabel"></span>
+        </div>
+      </header>
+
+      <!-- panel region -->
+      <div class="panel-region">
+
+        <!-- ===== PROXIES ===== -->
+        <div class="panel xscroll" x-show="tab==='proxies'">
+          <div style="margin-bottom:10px">
+            <div class="field-box">
+              <span class="icon-left"><i data-lucide="search" class="icon"></i></span>
+              <input class="field-input" placeholder="Search proxies" x-model="query">
+            </div>
+          </div>
+          <div class="toolbar-2">
+            <button class="btn btn-secondary btn-full" @click="testAll()">Test all</button>
+            <button class="btn btn-primary btn-full" @click="openAddProxy()">Add proxy</button>
+          </div>
+          <div class="gh-eyebrow count-label" x-text="countLabel"></div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <template x-for="p in filteredProxies" :key="p.id">
+              <div class="proxy-card" :class="{ active: p.id === activeId }">
+                <div class="proxy-head" role="button" @click="toggleExpand(p.id)">
+                  <div style="min-width:0;flex:1">
+                    <div class="proxy-title-row">
+                      <span class="active-dot" x-show="p.id === activeId"></span>
+                      <span class="proxy-name" x-text="p.name"></span>
+                    </div>
+                    <div class="proxy-sub">
+                      <span class="proto-pill" x-text="(p.protocol || '').toUpperCase()"></span>
+                      <span class="proxy-endpoint" x-text="endpoint(p)"></span>
+                    </div>
+                  </div>
+                  <span class="testing-pill" x-show="p._testing">
+                    <span class="spinner"></span> testing
+                  </span>
+                  <span x-show="!p._testing" class="lat-pill" :class="latInfo(p).cls" x-text="latInfo(p).text"></span>
+                  <i data-lucide="chevron-down" class="chev" :class="{ open: expandedId === p.id }"></i>
+                </div>
+
+                <div class="proxy-detail" x-show="expandedId === p.id">
+                  <div class="detail-rows">
+                    <div class="detail-row"><span class="k">Address</span><span class="v" x-text="endpoint(p)"></span></div>
+                    <div class="detail-row"><span class="k">Source</span><span class="v" x-text="proxySource(p)"></span></div>
+                  </div>
+                  <div class="detail-actions">
+                    <button class="row-btn row-btn-primary" x-show="p.id !== activeId" @click="activate(p.id)">
+                      <i data-lucide="check" class="icon"></i> Set active
+                    </button>
+                    <div class="active-chip" x-show="p.id === activeId">
+                      <i data-lucide="check-circle-2" class="icon"></i> Active connection
+                    </div>
+                    <button class="row-btn row-btn-secondary" @click="testOne(p.id)">
+                      <i data-lucide="zap" class="icon"></i> Test
+                    </button>
+                    <button class="row-btn row-btn-danger" aria-label="Delete proxy" @click="deleteProxy(p.id)">
+                      <i data-lucide="trash-2" class="icon"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="empty-state" x-show="filteredProxies.length === 0">
+            <i data-lucide="search-x" class="icon"></i>
+            <p style="margin:12px 0 0" x-text="query ? ('No proxies match “' + query + '”.') : 'No proxies yet — add one or refresh a subscription.'"></p>
+          </div>
+        </div>
+
+        <!-- ===== SUBSCRIPTIONS ===== -->
+        <div class="panel subs xscroll" x-show="tab==='subs'">
+          <h2 class="section-head">Subscriptions</h2>
+          <p class="section-lead">URLs that deliver a batch of proxies. Refresh to pull the latest.</p>
+          <div class="toolbar-2" style="margin-bottom:16px">
+            <button class="btn btn-secondary btn-full" @click="refreshAllSubs()">Refresh all</button>
+            <button class="btn btn-primary btn-full" @click="openAddSub()">Add new</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <template x-for="sub in subs" :key="sub.id">
+              <div class="sub-card">
+                <div class="sub-top">
+                  <div style="min-width:0;flex:1">
+                    <div class="sub-name" x-text="sub.name"></div>
+                    <div class="sub-url" x-text="sub.url"></div>
+                  </div>
+                  <div class="sub-actions">
+                    <span class="icon-btn spinning" x-show="sub._refreshing"><span class="spinner"></span></span>
+                    <button class="icon-btn" x-show="!sub._refreshing" aria-label="Refresh subscription" @click="refreshSub(sub.id)">
+                      <i data-lucide="refresh-cw" class="icon"></i>
+                    </button>
+                    <button class="icon-btn danger" aria-label="Delete subscription" @click="askDeleteSub(sub.id)">
+                      <i data-lucide="trash-2" class="icon"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="sub-meta">
+                  <i data-lucide="clock" class="icon"></i>
+                  <span x-text="subMeta(sub)"></span>
+                </div>
+                <div class="sub-error" x-show="!!sub.error">
+                  <i data-lucide="alert-triangle" class="icon"></i>
+                  <span x-text="'Last refresh failed · ' + sub.error"></span>
+                </div>
+              </div>
+            </template>
+            <div class="empty-state" x-show="subs.length === 0">
+              <i data-lucide="rss" class="icon"></i>
+              <p style="margin:12px 0 0">No subscriptions yet — add a URL to pull proxies.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== STATUS ===== -->
+        <div class="panel status xscroll" x-show="tab==='status'">
+          <h2 class="section-head" style="margin-bottom:14px">Status</h2>
+
+          <!-- process -->
+          <div class="status-card">
+            <div class="gh-eyebrow" style="margin-bottom:11px">XRAY PROCESS</div>
+            <div class="proc-row">
+              <span class="status-dot" :class="status.running ? 'on' : 'off'"></span>
+              <div>
+                <div class="proc-label" x-text="runLabel"></div>
+                <div class="proc-sub" x-text="processSubText"></div>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <div x-show="status.running" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn btn-secondary btn-full" @click="restartXray()">Restart</button>
+                <button class="btn btn-secondary btn-full btn-stop" @click="stopXray()">Stop</button>
+              </div>
+              <button x-show="!status.running" class="btn btn-primary btn-full" @click="startXray()">Start Xray</button>
+            </div>
+          </div>
+
+          <!-- active proxy -->
+          <div class="status-card">
+            <div class="gh-eyebrow" style="margin-bottom:10px">ACTIVE PROXY</div>
+            <template x-if="activeProxy">
+              <div class="active-proxy-row">
+                <span class="active-proxy-icon"><i data-lucide="shield-check" class="icon"></i></span>
+                <div style="min-width:0">
+                  <div class="active-proxy-name" x-text="activeProxy.name"></div>
+                  <div class="active-proxy-endpoint" x-text="endpoint(activeProxy)"></div>
+                </div>
+              </div>
+            </template>
+            <div x-show="!activeProxy" style="color:var(--text-muted);font-size:14px">No proxy selected yet.</div>
+          </div>
+
+          <!-- ports -->
+          <div class="ports-card">
+            <div class="gh-eyebrow" style="margin:12px 0 2px">LOCAL PORTS</div>
+            <div class="port-row divider">
+              <div>
+                <div class="port-name">SOCKS5</div>
+                <div class="port-host">127.0.0.1</div>
+              </div>
+              <button class="copy-btn" @click="copyPort(status.socksPort)">
+                <span x-text="status.socksPort"></span><i data-lucide="copy" class="icon"></i>
+              </button>
+            </div>
+            <div class="port-row">
+              <div>
+                <div class="port-name">HTTP</div>
+                <div class="port-host">127.0.0.1</div>
+              </div>
+              <button class="copy-btn" @click="copyPort(status.httpPort)">
+                <span x-text="status.httpPort"></span><i data-lucide="copy" class="icon"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- log feed -->
+          <div class="log-head">
+            <div class="gh-eyebrow">LIVE LOG</div>
+            <button class="log-clear" @click="clearLogs()">Clear</button>
+          </div>
+          <pre x-ref="logFeed" class="log-feed xscroll" x-text="logsText"></pre>
+        </div>
+
+      </div>
+
+      <!-- bottom nav -->
+      <div class="bottom-nav-wrap">
+        <nav class="bottom-nav">
+          <button class="nav-item" :class="{ active: tab==='proxies' }" @click="tab='proxies'">
+            <span class="nav-icon"><i data-lucide="list" class="icon"></i></span> Proxies
+          </button>
+          <button class="nav-item" :class="{ active: tab==='subs' }" @click="tab='subs'">
+            <span class="nav-icon"><i data-lucide="rss" class="icon"></i></span> Subscriptions
+          </button>
+          <button class="nav-item" :class="{ active: tab==='status' }" @click="tab='status'">
+            <span class="nav-icon"><i data-lucide="activity" class="icon"></i></span> Status
+          </button>
+        </nav>
+      </div>
+
+      <!-- toasts -->
+      <div class="toast-stack">
+        <template x-for="t in toasts" :key="t.id">
+          <div class="toast-wrap">
+            <div class="toast" role="status">
+              <span class="toast-icon" :class="t.tone || 'default'"><i :data-lucide="toastIcon(t.tone)" class="icon"></i></span>
+              <div class="toast-body">
+                <div class="toast-title" x-show="!!t.title" x-text="t.title"></div>
+                <div class="toast-message" x-show="!!t.message" x-text="t.message"></div>
+              </div>
+              <button class="toast-close" aria-label="Dismiss" @click="dismissToast(t.id)">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+    </div>
+  </template>
+
+  <!-- ============ MODALS ============ -->
+  <template x-if="modal === 'addProxy'">
+    <div class="modal-scrim bottom" @click="closeModal()">
+      <div class="modal-sheet" @click.stop>
+        <h3 class="modal-title">Add a proxy</h3>
+        <p class="modal-sub">Paste a <code>vmess://</code>, <code>vless://</code>, <code>trojan://</code>, <code>ss://</code> or <code>hy2://</code> link.</p>
+        <textarea class="textarea" rows="3" placeholder="vmess://eyJ2IjoiMiIsInBzIjoi..." x-model="newProxyUrl"></textarea>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="closeModal()">Cancel</button>
+          <button class="btn btn-primary" @click="confirmAddProxy()">Add proxy</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template x-if="modal === 'addSub'">
+    <div class="modal-scrim bottom" @click="closeModal()">
+      <div class="modal-sheet" @click.stop>
+        <h3 class="modal-title" style="margin-bottom:16px">Add a subscription</h3>
+        <div class="field" style="margin-bottom:14px">
+          <label class="field-label" for="subName">Name</label>
+          <div class="field-box"><input id="subName" class="field-input" placeholder="e.g. Main provider" x-model="newSubName"></div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="subUrl">Subscription URL</label>
+          <div class="field-box"><input id="subUrl" class="field-input" placeholder="https://..." x-model="newSubUrl"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="closeModal()">Cancel</button>
+          <button class="btn btn-primary" @click="confirmAddSub()">Add</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template x-if="delSub">
+    <div class="modal-scrim center" @click="closeModal()">
+      <div class="modal-dialog" @click.stop>
+        <h3 class="modal-title" x-text="'Delete “' + delSub.name + '”?'"></h3>
+        <p class="modal-sub" x-text="(delSub.count || 0) + ' proxies came from this subscription. What should happen to them?'"></p>
+        <div class="modal-stack">
+          <button class="row-btn row-btn-secondary" @click="deleteSub(true)">Keep the proxies</button>
+          <button class="row-btn row-btn-danger" @click="deleteSub(false)">Delete subscription &amp; its proxies</button>
+          <button class="modal-cancel" @click="closeModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+</body>
+</html>

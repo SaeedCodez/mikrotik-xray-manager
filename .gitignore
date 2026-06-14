@@ -1,0 +1,13 @@
+# Runtime data (proxies, subscriptions, generated xray config)
+/data/
+
+# Build artifacts
+/xray-manager
+*.exe
+
+# Local env
+.env
+
+# OS / editor
+.DS_Store
+*.swp
