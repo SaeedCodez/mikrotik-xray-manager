@@ -19,7 +19,7 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	}
 	cfg := M{
 		"log": M{"loglevel": "warning"},
-		"dns": M{"servers": []interface{}{"1.1.1.1", "8.8.8.8", "localhost"}},
+		"dns": M{"servers": []interface{}{"1.1.1.1", "1.0.0.1", "8.8.8.8"}},
 		"inbounds": []interface{}{
 			M{
 				"tag":      "socks",
