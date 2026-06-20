@@ -28,6 +28,10 @@ RUN set -eu; \
       "https://github.com/XTLS/Xray-core/releases/latest/download/${asset}"; \
     unzip -o /tmp/xray.zip xray -d /usr/local/bin; \
     chmod 0755 /usr/local/bin/xray; \
+    # geoip.dat / geosite.dat ship inside the same zip — xray needs them for
+    # routing rules like "geoip:private", otherwise it fails to start.
+    mkdir -p /usr/local/share/xray; \
+    unzip -o /tmp/xray.zip geoip.dat geosite.dat -d /usr/local/share/xray; \
     /usr/local/bin/xray version | head -n1
 
 # ---- runtime stage ----
@@ -37,10 +41,12 @@ WORKDIR /app
 
 COPY --from=builder /app/xray-manager .
 COPY --from=builder /usr/local/bin/xray /usr/local/bin/xray
+COPY --from=builder /usr/local/share/xray /usr/local/share/xray
 
 ENV APP_PORT=8080 \
     DATA_DIR=/app/data \
-    XRAY_BINARY=/usr/local/bin/xray
+    XRAY_BINARY=/usr/local/bin/xray \
+    XRAY_LOCATION_ASSET=/usr/local/share/xray
 
 EXPOSE 8080 10808 10809
 CMD ["./xray-manager"]
