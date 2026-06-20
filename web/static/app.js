@@ -6,6 +6,9 @@
  *  >0  → round-trip in milliseconds
  */
 
+// Tabs that can appear in the URL hash (#proxies, #test, …).
+const TABS = ["proxies", "subs", "test", "status"];
+
 function xrayApp() {
   return {
     // --- auth / nav ---
@@ -37,6 +40,16 @@ function xrayApp() {
     _logSource: null,
     _testing: false,
 
+    // --- DNS config ---
+    dns: { servers: [], loaded: false },
+    dnsEditing: false,
+    dnsDraft: [],
+    dnsSaving: false,
+
+    // --- connection test ---
+    conn: { url: "", running: false, result: null, error: "" },
+    connHeadersOpen: false,
+
     // ===================================================================
     // lifecycle
     // ===================================================================
@@ -49,14 +62,26 @@ function xrayApp() {
       // Tick once a second for live uptime.
       setInterval(() => { this.now = Date.now(); }, 1000);
 
-      // React to tab changes: manage the log stream.
+      // Restore the active tab from the URL hash (e.g. #test) on load…
+      this.tab = this.tabFromHash() || this.tab;
+      // …and keep tab ↔ hash in sync in both directions.
       this.$watch("tab", (t) => {
+        if (location.hash.slice(1) !== t) location.hash = t;
         if (t === "status") this.openLogStream();
         else this.closeLogStream();
+      });
+      window.addEventListener("hashchange", () => {
+        const h = this.tabFromHash();
+        if (h && h !== this.tab) this.tab = h;
       });
 
       await this.checkAuth();
       this.booted = true;
+    },
+
+    tabFromHash() {
+      const h = (location.hash || "").replace(/^#/, "");
+      return TABS.includes(h) ? h : null;
     },
 
     refreshIconsSoon() {
@@ -121,7 +146,7 @@ function xrayApp() {
     },
 
     async loadAll() {
-      await Promise.all([this.loadProxies(), this.loadSubs(), this.loadStatus()]);
+      await Promise.all([this.loadProxies(), this.loadSubs(), this.loadStatus(), this.loadDNS()]);
     },
     async loadProxies() {
       try {
@@ -142,6 +167,95 @@ function xrayApp() {
         this.status = await this.api("GET", "/api/xray/status");
         this.statusLoadedAt = Date.now();
       } catch (_) {}
+    },
+    async loadDNS() {
+      try {
+        const r = await this.api("GET", "/api/xray/dns");
+        this.dns = { servers: (r && r.servers) || [], loaded: true };
+      } catch (_) {}
+    },
+
+    // ===================================================================
+    // DNS configuration
+    // ===================================================================
+    startEditDNS() {
+      this.dnsDraft = this.dns.servers.length ? [...this.dns.servers] : [""];
+      this.dnsEditing = true;
+    },
+    cancelEditDNS() { this.dnsEditing = false; this.dnsDraft = []; },
+    addDNSRow() { this.dnsDraft.push(""); },
+    removeDNSRow(i) {
+      this.dnsDraft.splice(i, 1);
+      if (this.dnsDraft.length === 0) this.dnsDraft.push("");
+    },
+    async saveDNS() {
+      const servers = this.dnsDraft.map((s) => s.trim()).filter(Boolean);
+      if (servers.length === 0) {
+        this.pushToast({ tone: "warning", title: "Add at least one DNS server" });
+        return;
+      }
+      this.dnsSaving = true;
+      try {
+        const r = await this.api("PUT", "/api/xray/dns", { servers });
+        this.dns = { servers: r.servers || servers, loaded: true };
+        if (r.status) { this.status = r.status; this.statusLoadedAt = Date.now(); }
+        this.dnsEditing = false; this.dnsDraft = [];
+        this.pushToast({
+          tone: "success", title: "DNS updated",
+          message: r.restarted ? "Xray restarted to apply the change." : "Saved.",
+        });
+      } catch (e) {
+        this.pushToast({ tone: "warning", title: "Couldn't save DNS", message: e.message });
+      } finally {
+        this.dnsSaving = false;
+      }
+    },
+
+    // ===================================================================
+    // connection test
+    // ===================================================================
+    async runConnTest() {
+      const url = this.conn.url.trim();
+      if (!url) { this.pushToast({ tone: "warning", title: "Enter a URL to test" }); return; }
+      if (!this.status.running) {
+        this.pushToast({ tone: "warning", title: "Start Xray first", message: "The test routes through the running core." });
+        return;
+      }
+      this.conn.running = true;
+      this.conn.error = "";
+      this.conn.result = null;
+      this.connHeadersOpen = false;
+      try {
+        const r = await this.api("POST", "/api/connection/test", { url });
+        this.conn.result = r;
+      } catch (e) {
+        this.conn.error = e.message;
+      } finally {
+        this.conn.running = false;
+      }
+    },
+    connLatInfo(ms) {
+      if (ms === null || ms === undefined) return { text: "—", cls: "lat-untested" };
+      let cls = "lat-good";
+      if (ms > 1500) cls = "lat-bad";
+      else if (ms > 700) cls = "lat-mid";
+      return { text: ms + " ms", cls };
+    },
+    statusClass(code) {
+      if (!code) return "code-bad";
+      if (code < 300) return "code-good";
+      if (code < 400) return "code-mid";
+      return "code-bad";
+    },
+    fmtBytes(n) {
+      if (n === null || n === undefined || n < 0) return "—";
+      if (n < 1024) return n + " B";
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+      return (n / 1048576).toFixed(2) + " MB";
+    },
+    get connHeaderRows() {
+      const h = (this.conn.result && this.conn.result.headers) || {};
+      return Object.keys(h).sort().map((k) => ({ k, v: h[k] }));
     },
 
     // ===================================================================
@@ -168,6 +282,14 @@ function xrayApp() {
     },
     get activeProxy() { return this.proxies.find((p) => p.id === this.activeId) || null; },
     get logsText() { return this.logs.join("\n"); },
+    get coreBarSub() {
+      if (this.status.running) {
+        const secs = this.status.uptime + Math.max(0, (this.now - this.statusLoadedAt) / 1000);
+        return "Up " + this.fmtUptime(secs);
+      }
+      if (!this.status.binaryOk) return "Binary not found";
+      return this.activeProxy ? this.activeProxy.name : "No proxy selected";
+    },
 
     subName(id) { const s = this.subs.find((x) => x.id === id); return s ? s.name : null; },
     proxySource(p) { return p.subscriptionId ? (this.subName(p.subscriptionId) || "Subscription") : "Added manually"; },

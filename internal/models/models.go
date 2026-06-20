@@ -63,3 +63,11 @@ type ActiveProxy struct {
 	ProxyID string    `json:"proxyId"`
 	SetAt   time.Time `json:"setAt"`
 }
+
+// Settings holds user-adjustable runtime settings persisted across restarts.
+type Settings struct {
+	// DNSServers are the resolvers written into the xray "dns" block. Each entry
+	// may be a plain IP ("1.1.1.1"), "localhost", or a scheme'd resolver such as
+	// "https://1.1.1.1/dns-query" or "tcp://8.8.8.8".
+	DNSServers []string `json:"dnsServers"`
+}

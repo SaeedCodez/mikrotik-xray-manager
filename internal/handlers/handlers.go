@@ -70,6 +70,10 @@ func (a *App) Handler() http.Handler {
 	api.HandleFunc("POST /api/xray/start", a.StartXray)
 	api.HandleFunc("POST /api/xray/stop", a.StopXray)
 	api.HandleFunc("GET /api/xray/logs", a.XrayLogs) // SSE
+	api.HandleFunc("GET /api/xray/dns", a.GetDNS)
+	api.HandleFunc("PUT /api/xray/dns", a.UpdateDNS)
+
+	api.HandleFunc("POST /api/connection/test", a.TestConnection)
 
 	mux.Handle("/api/", a.auth.Middleware(api))
 

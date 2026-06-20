@@ -19,7 +19,7 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	}
 	cfg := M{
 		"log": M{"loglevel": "warning"},
-		"dns": M{"servers": []interface{}{"1.1.1.1", "1.0.0.1", "8.8.8.8"}},
+		"dns": M{"servers": toIface(m.DNS())},
 		"inbounds": []interface{}{
 			M{
 				"tag":      "socks",
@@ -221,4 +221,13 @@ func orDefault(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// toIface converts a string slice to an []interface{} for JSON config blocks.
+func toIface(ss []string) []interface{} {
+	out := make([]interface{}, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
 }

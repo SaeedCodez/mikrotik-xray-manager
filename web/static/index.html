@@ -169,6 +169,118 @@
           </div>
         </div>
 
+        <!-- ===== CONNECTION TEST ===== -->
+        <div class="panel test xscroll" x-show="tab==='test'">
+          <h2 class="section-head">Connection test</h2>
+          <p class="section-lead">Send a request through the running Xray core and inspect the response.</p>
+
+          <div class="field" style="margin-bottom:10px">
+            <label class="field-label" for="testUrl">URL</label>
+            <div class="field-box">
+              <span class="icon-left"><i data-lucide="link" class="icon"></i></span>
+              <input id="testUrl" class="field-input" placeholder="https://example.com"
+                     x-model="conn.url" @keydown.enter="runConnTest()">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-lg btn-full" @click="runConnTest()" :disabled="conn.running">
+            <span class="spinner" x-show="conn.running" style="width:16px;height:16px"></span>
+            <i data-lucide="play" class="icon" x-show="!conn.running"></i>
+            <span x-text="conn.running ? 'Testing…' : 'Test'"></span>
+          </button>
+
+          <!-- error state -->
+          <div class="test-error" x-show="!!conn.error">
+            <i data-lucide="alert-triangle" class="icon"></i>
+            <span x-text="conn.error"></span>
+          </div>
+
+          <!-- result card -->
+          <template x-if="conn.result">
+            <div class="test-result">
+              <!-- hero: latency + verdict -->
+              <div class="test-hero" :class="conn.result.ok ? 'ok' : 'fail'">
+                <div class="test-hero-main">
+                  <span class="test-verdict-icon">
+                    <i :data-lucide="conn.result.ok ? 'check-circle-2' : 'x-circle'" class="icon"></i>
+                  </span>
+                  <div style="min-width:0">
+                    <div class="test-verdict" x-text="conn.result.ok ? 'Success' : (conn.result.status ? 'Failed' : 'No response')"></div>
+                    <div class="test-via" x-show="!!conn.result.via" x-text="'via ' + conn.result.via"></div>
+                  </div>
+                </div>
+                <div class="test-latency" :class="connLatInfo(conn.result.latency).cls">
+                  <span class="test-latency-num" x-text="conn.result.latency"></span>
+                  <span class="test-latency-unit">ms</span>
+                </div>
+              </div>
+
+              <!-- request error (reached proxy but failed) -->
+              <div class="test-inline-error" x-show="!!conn.result.error">
+                <i data-lucide="alert-octagon" class="icon"></i>
+                <span x-text="conn.result.error"></span>
+              </div>
+
+              <!-- stat grid -->
+              <div class="test-grid" x-show="!conn.result.error">
+                <div class="test-stat">
+                  <div class="test-stat-k">Status</div>
+                  <div class="test-stat-v">
+                    <span class="code-pill" :class="statusClass(conn.result.status)"
+                          x-text="conn.result.status + (conn.result.statusText ? ' ' + conn.result.statusText : '')"></span>
+                  </div>
+                </div>
+                <div class="test-stat">
+                  <div class="test-stat-k">Protocol</div>
+                  <div class="test-stat-v mono" x-text="conn.result.proto || '—'"></div>
+                </div>
+                <div class="test-stat">
+                  <div class="test-stat-k">Size</div>
+                  <div class="test-stat-v mono" x-text="fmtBytes(conn.result.contentLength)"></div>
+                </div>
+                <div class="test-stat">
+                  <div class="test-stat-k">Content-Type</div>
+                  <div class="test-stat-v mono trunc" x-text="(conn.result.contentType || '—').split(';')[0]"></div>
+                </div>
+                <div class="test-stat" x-show="!!conn.result.server">
+                  <div class="test-stat-k">Server</div>
+                  <div class="test-stat-v mono trunc" x-text="conn.result.server"></div>
+                </div>
+                <div class="test-stat">
+                  <div class="test-stat-k">Latency</div>
+                  <div class="test-stat-v mono" x-text="conn.result.latency + ' ms'"></div>
+                </div>
+              </div>
+
+              <!-- final URL -->
+              <div class="test-url-row" x-show="!!conn.result.finalUrl">
+                <span class="test-stat-k">URL</span>
+                <span class="test-url mono" x-text="conn.result.finalUrl"></span>
+              </div>
+
+              <!-- headers -->
+              <div class="test-headers" x-show="connHeaderRows.length">
+                <button class="test-headers-toggle" @click="connHeadersOpen = !connHeadersOpen">
+                  <i data-lucide="chevron-right" class="chev" :class="{ open: connHeadersOpen }"></i>
+                  <span x-text="'Response headers (' + connHeaderRows.length + ')'"></span>
+                </button>
+                <div class="test-headers-body" x-show="connHeadersOpen">
+                  <template x-for="h in connHeaderRows" :key="h.k">
+                    <div class="hdr-row">
+                      <span class="hdr-k" x-text="h.k"></span>
+                      <span class="hdr-v" x-text="h.v"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div class="empty-state" x-show="!conn.result && !conn.error && !conn.running">
+            <i data-lucide="gauge" class="icon"></i>
+            <p style="margin:12px 0 0">Enter a URL and tap Test to measure the real delay through your active proxy.</p>
+          </div>
+        </div>
+
         <!-- ===== STATUS ===== -->
         <div class="panel status xscroll" x-show="tab==='status'">
           <h2 class="section-head" style="margin-bottom:14px">Status</h2>
@@ -178,18 +290,13 @@
             <div class="gh-eyebrow" style="margin-bottom:11px">XRAY PROCESS</div>
             <div class="proc-row">
               <span class="status-dot" :class="status.running ? 'on' : 'off'"></span>
-              <div>
+              <div style="min-width:0">
                 <div class="proc-label" x-text="runLabel"></div>
                 <div class="proc-sub" x-text="processSubText"></div>
               </div>
+              <span class="proc-pid" x-show="status.running && status.pid" x-text="'pid ' + status.pid"></span>
             </div>
-            <div style="margin-top:14px">
-              <div x-show="status.running" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <button class="btn btn-secondary btn-full" @click="restartXray()">Restart</button>
-                <button class="btn btn-secondary btn-full btn-stop" @click="stopXray()">Stop</button>
-              </div>
-              <button x-show="!status.running" class="btn btn-primary btn-full" @click="startXray()">Start Xray</button>
-            </div>
+            <p class="proc-hint">Start and stop the core from the bar below — it's available on every tab.</p>
           </div>
 
           <!-- active proxy -->
@@ -230,6 +337,59 @@
             </div>
           </div>
 
+          <!-- DNS config -->
+          <div class="status-card dns-card">
+            <div class="dns-head">
+              <div class="gh-eyebrow">DNS RESOLVERS</div>
+              <button class="dns-edit-btn" x-show="!dnsEditing" @click="startEditDNS()">
+                <i data-lucide="pencil" class="icon"></i> Edit
+              </button>
+            </div>
+
+            <!-- view mode -->
+            <template x-if="!dnsEditing">
+              <div>
+                <div class="dns-list" x-show="dns.servers.length">
+                  <template x-for="(s, i) in dns.servers" :key="i">
+                    <span class="dns-chip"><i data-lucide="globe" class="icon"></i><span x-text="s"></span></span>
+                  </template>
+                </div>
+                <div class="dns-empty" x-show="!dns.servers.length">No DNS servers configured.</div>
+                <p class="dns-hint">Used by xray to resolve domains. Changes restart the core if it's running.</p>
+              </div>
+            </template>
+
+            <!-- edit mode -->
+            <template x-if="dnsEditing">
+              <div>
+                <div class="dns-rows">
+                  <template x-for="(s, i) in dnsDraft" :key="i">
+                    <div class="dns-row">
+                      <div class="field-box">
+                        <span class="icon-left"><i data-lucide="globe" class="icon"></i></span>
+                        <input class="field-input" placeholder="1.1.1.1 or https://1.1.1.1/dns-query"
+                               x-model="dnsDraft[i]" @keydown.enter="saveDNS()">
+                      </div>
+                      <button class="dns-row-del" aria-label="Remove" @click="removeDNSRow(i)">
+                        <i data-lucide="x" class="icon"></i>
+                      </button>
+                    </div>
+                  </template>
+                </div>
+                <button class="dns-add" @click="addDNSRow()">
+                  <i data-lucide="plus" class="icon"></i> Add server
+                </button>
+                <div class="dns-actions">
+                  <button class="btn btn-ghost" @click="cancelEditDNS()" :disabled="dnsSaving">Cancel</button>
+                  <button class="btn btn-primary" @click="saveDNS()" :disabled="dnsSaving">
+                    <span class="spinner" x-show="dnsSaving" style="width:14px;height:14px"></span>
+                    <span x-text="dnsSaving ? 'Saving…' : 'Save DNS'"></span>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+
           <!-- log feed -->
           <div class="log-head">
             <div class="gh-eyebrow">LIVE LOG</div>
@@ -240,17 +400,48 @@
 
       </div>
 
-      <!-- bottom nav -->
-      <div class="bottom-nav-wrap">
+      <!-- dock: global core controls + bottom nav -->
+      <div class="dock">
+
+        <!-- global xray core controls (always visible) -->
+        <div class="core-bar" :class="status.running ? 'is-running' : 'is-stopped'">
+          <div class="core-state">
+            <span class="core-dot"></span>
+            <div style="min-width:0">
+              <div class="core-label" x-text="runLabel"></div>
+              <div class="core-sub" x-text="coreBarSub"></div>
+            </div>
+          </div>
+          <div class="core-actions">
+            <button class="core-btn core-restart" x-show="status.running" @click="restartXray()" aria-label="Restart Xray">
+              <i data-lucide="rotate-cw" class="icon"></i>
+            </button>
+            <button class="core-btn core-stop" x-show="status.running" @click="stopXray()">
+              <i data-lucide="square" class="icon"></i> Stop
+            </button>
+            <button class="core-btn core-start" x-show="!status.running" @click="startXray()" :disabled="!status.binaryOk">
+              <i data-lucide="play" class="icon"></i> Start
+            </button>
+          </div>
+        </div>
+
+        <!-- bottom nav -->
         <nav class="bottom-nav">
           <button class="nav-item" :class="{ active: tab==='proxies' }" @click="tab='proxies'">
-            <span class="nav-icon"><i data-lucide="list" class="icon"></i></span> Proxies
+            <span class="nav-icon"><i data-lucide="list" class="icon"></i></span>
+            <span class="nav-label">Proxies</span>
           </button>
           <button class="nav-item" :class="{ active: tab==='subs' }" @click="tab='subs'">
-            <span class="nav-icon"><i data-lucide="rss" class="icon"></i></span> Subscriptions
+            <span class="nav-icon"><i data-lucide="rss" class="icon"></i></span>
+            <span class="nav-label">Subs</span>
+          </button>
+          <button class="nav-item" :class="{ active: tab==='test' }" @click="tab='test'">
+            <span class="nav-icon"><i data-lucide="gauge" class="icon"></i></span>
+            <span class="nav-label">Test</span>
           </button>
           <button class="nav-item" :class="{ active: tab==='status' }" @click="tab='status'">
-            <span class="nav-icon"><i data-lucide="activity" class="icon"></i></span> Status
+            <span class="nav-icon"><i data-lucide="activity" class="icon"></i></span>
+            <span class="nav-label">Status</span>
           </button>
         </nav>
       </div>

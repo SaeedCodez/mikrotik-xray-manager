@@ -38,6 +38,9 @@ func main() {
 	authMgr := auth.New(cfg.Password, cfg.SessionSecret)
 	xrayMgr := xray.NewManager(cfg.XrayBinary, cfg.XrayConfigPath, cfg.InboundSocks, cfg.InboundHTTP)
 
+	// Restore persisted DNS settings so generated configs match the UI.
+	xrayMgr.SetDNS(store.Settings().DNSServers)
+
 	// Restore last-known active proxy into the manager for status display.
 	if active := store.Active().ProxyID; active != "" {
 		xrayMgr.SetActiveID(active)

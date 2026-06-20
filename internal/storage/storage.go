@@ -16,13 +16,17 @@ type Store struct {
 	mu      sync.RWMutex
 	dataDir string
 
-	proxies []models.Proxy
-	subs    []models.Subscription
-	active  models.ActiveProxy
+	proxies  []models.Proxy
+	subs     []models.Subscription
+	active   models.ActiveProxy
+	settings models.Settings
 }
 
 // ErrNotFound is returned when an entity ID does not exist.
 var ErrNotFound = errors.New("not found")
+
+// DefaultDNSServers is used when no DNS configuration has been saved yet.
+func DefaultDNSServers() []string { return []string{"1.1.1.1", "1.0.0.1", "8.8.8.8"} }
 
 // New opens (and if necessary creates) the data files under dataDir.
 func New(dataDir string) (*Store, error) {
@@ -38,6 +42,12 @@ func New(dataDir string) (*Store, error) {
 	}
 	if err := s.load(&s.active, s.path("active.json"), models.ActiveProxy{}); err != nil {
 		return nil, err
+	}
+	if err := s.load(&s.settings, s.path("settings.json"), models.Settings{DNSServers: DefaultDNSServers()}); err != nil {
+		return nil, err
+	}
+	if len(s.settings.DNSServers) == 0 {
+		s.settings.DNSServers = DefaultDNSServers()
 	}
 	return s, nil
 }
@@ -316,4 +326,23 @@ func (s *Store) SetActive(a models.ActiveProxy) error {
 	defer s.mu.Unlock()
 	s.active = a
 	return writeJSON(s.path("active.json"), a)
+}
+
+// ---------- Settings ----------
+
+// Settings returns a copy of the persisted settings.
+func (s *Store) Settings() models.Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := s.settings
+	out.DNSServers = append([]string(nil), s.settings.DNSServers...)
+	return out
+}
+
+// SetDNSServers replaces the DNS server list and persists.
+func (s *Store) SetDNSServers(servers []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settings.DNSServers = append([]string(nil), servers...)
+	return writeJSON(s.path("settings.json"), s.settings)
 }

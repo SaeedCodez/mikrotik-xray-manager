@@ -33,11 +33,12 @@ type Manager struct {
 	socksPort  int
 	httpPort   int
 
-	mu        sync.Mutex
-	cmd       *exec.Cmd
-	activeID  string
-	startTime time.Time
-	running   bool
+	mu         sync.Mutex
+	cmd        *exec.Cmd
+	activeID   string
+	startTime  time.Time
+	running    bool
+	dnsServers []string
 
 	logMu sync.Mutex
 	logs  []string
@@ -58,6 +59,24 @@ func NewManager(binary, configPath string, socksPort, httpPort int) *Manager {
 // SocksPort and HTTPPort expose the configured inbound ports.
 func (m *Manager) SocksPort() int { return m.socksPort }
 func (m *Manager) HTTPPort() int  { return m.httpPort }
+
+// SetDNS replaces the DNS servers baked into generated configs.
+func (m *Manager) SetDNS(servers []string) {
+	m.mu.Lock()
+	m.dnsServers = append([]string(nil), servers...)
+	m.mu.Unlock()
+}
+
+// DNS returns the configured DNS servers, falling back to sane defaults when
+// none have been set.
+func (m *Manager) DNS() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.dnsServers) == 0 {
+		return []string{"1.1.1.1", "1.0.0.1", "8.8.8.8"}
+	}
+	return append([]string(nil), m.dnsServers...)
+}
 
 // BinaryAvailable reports whether the xray binary can be found/executed.
 func (m *Manager) BinaryAvailable() bool {
