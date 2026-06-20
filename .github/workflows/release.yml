@@ -1,0 +1,43 @@
+name: release
+
+# Build the single static binary for every target and attach it to the GitHub
+# Release. Triggered by pushing a version tag (e.g. `git tag v0.1.0 && git push --tags`),
+# or run manually from the Actions tab.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goarch: arm64, goarm: '',  name: xray-manager-linux-arm64 }  # Raspberry Pi 5 (64-bit)
+          - { goarch: amd64, goarm: '',  name: xray-manager-linux-amd64 }  # generic x86-64
+          - { goarch: arm,   goarm: '7', name: xray-manager-linux-armv7 }  # 32-bit Pi / older boards
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: go build -trimpath -ldflags="-s -w" -o "${{ matrix.name }}" .
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}
+          fail_on_unmatched_files: true

@@ -97,25 +97,98 @@ Then open `http://<host>:8080`.
 > other machines on your LAN (e.g. a MikroTik router) can use them. Keep the
 > machine behind your LAN firewall, or restrict the ports as appropriate.
 
-### Docker
+### Docker — one command (recommended for Raspberry Pi / always-on)
+
+Run this **on the target machine** (the Pi, or any Linux box). It installs Docker
+if missing, fetches the source, generates a config with a random session secret
+and password, then builds and starts the panel as an always-on container:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SaeedCodez/mikrotik-xray-manager/main/docker-install.sh | sudo bash
+```
+
+What it does for you:
+
+- Detects the architecture (incl. ARM for Raspberry Pi) automatically.
+- **Bakes the matching `xray-core` into the image** — nothing else to install,
+  no host binary to mount.
+- Runs with `restart: unless-stopped`, so it survives crashes **and reboots**.
+- Prints the panel URL (`http://<host-ip>:8080`) and the generated password when
+  it finishes.
+
+Manage it from the install dir (`/opt/xray-manager`):
+
+```bash
+docker compose logs -f                       # live logs
+docker compose restart                       # restart
+docker compose down                          # stop & remove
+git pull && docker compose up -d --build     # update to the latest source
+```
+
+#### Manual Compose (already cloned the repo)
+
+Copy `.env.example` to `.env` (set `APP_PASSWORD` and `SESSION_SECRET`), then:
+
+```bash
+docker compose up -d --build
+```
+
+`data/` is a bind-mount so your proxies/subscriptions survive restarts. To build
+and run by hand instead:
 
 ```bash
 docker build -t xray-manager .
-
-docker run -d \
-  --name xray-manager \
-  -p 8080:8080 \
-  -p 10808:10808 \
-  -p 10809:10809 \
+docker run -d --name xray-manager --restart unless-stopped \
+  -p 8080:8080 -p 10808:10808 -p 10809:10809 \
   -e APP_PASSWORD=secret123 \
   -e SESSION_SECRET=$(head -c 32 /dev/urandom | base64) \
   -v "$(pwd)/data:/app/data" \
-  -v /usr/local/bin/xray:/usr/local/bin/xray:ro \
   xray-manager
 ```
 
-The `xray` binary is mounted in so the container can manage it. `data/` is a
-volume so your proxies/subscriptions survive restarts.
+> The image already contains a matching `xray` binary, so no `-v /usr/local/bin/xray`
+> mount is needed.
+
+---
+
+## Alternative — native install without Docker (systemd)
+
+[`install.sh`](install.sh) is an all-in-one installer **and** service manager. It
+detects your architecture (Pi 5 = `arm64`), downloads the latest prebuilt binary
+from GitHub Releases (or builds from source if no release exists yet), installs
+[xray-core](https://github.com/XTLS/Xray-core), writes a config + a `systemd`
+service that auto-starts on boot and restarts on crash, and installs itself as the
+`xray-managerctl` command.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SaeedCodez/mikrotik-xray-manager/main/install.sh -o install.sh
+sudo bash install.sh install
+```
+
+Then open `http://<pi-ip>:8080`. Manage it afterwards with:
+
+```bash
+sudo xray-managerctl status        # service state + panel URL
+sudo xray-managerctl logs          # follow live logs
+sudo xray-managerctl update        # pull the latest build from GitHub & restart
+sudo xray-managerctl restart       # restart
+sudo xray-managerctl password      # change the panel password
+sudo xray-managerctl xray-update   # update the xray-core binary
+sudo xray-managerctl self-update   # update the management script itself
+sudo xray-managerctl uninstall     # remove (add --purge to also delete data)
+```
+
+Useful `install`/`update` flags: `--system-update` (also `apt upgrade` the Pi),
+`--source` (build from source instead of downloading), `--port N`, `--password PASS`.
+
+> **Prebuilt builds** come from the [`release` workflow](.github/workflows/release.yml):
+> push a version tag and GitHub Actions builds the `arm64`/`amd64`/`armv7` binaries
+> and attaches them to the Release. Until you cut the first tag, the script
+> auto-falls-back to building from source on the Pi.
+>
+> ```bash
+> git tag v0.1.0 && git push origin v0.1.0   # triggers the release build
+> ```
 
 ---
 

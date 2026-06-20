@@ -1,0 +1,23 @@
+# Xray Manager — Docker Compose
+#
+# Quick start (one command, see docker-install.sh / README):
+#   docker compose up -d --build
+#
+# Configuration is read from the .env file in this directory (created by
+# docker-install.sh, or copy .env.example to .env and edit it).
+
+services:
+  xray-manager:
+    build: .
+    image: xray-manager:local
+    container_name: xray-manager
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # host:container — both sides use APP_PORT so changing it in .env just works.
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+      - "${XRAY_INBOUND_PORT:-10808}:${XRAY_INBOUND_PORT:-10808}"
+      - "${XRAY_INBOUND_HTTP_PORT:-10809}:${XRAY_INBOUND_HTTP_PORT:-10809}"
+    volumes:
+      # Proxies, subscriptions and the generated xray config survive restarts.
+      - ./data:/app/data
