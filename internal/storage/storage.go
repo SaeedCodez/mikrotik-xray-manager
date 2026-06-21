@@ -20,6 +20,7 @@ type Store struct {
 	subs     []models.Subscription
 	active   models.ActiveProxy
 	settings models.Settings
+	rules    []models.RoutingRule
 }
 
 // ErrNotFound is returned when an entity ID does not exist.
@@ -48,6 +49,9 @@ func New(dataDir string) (*Store, error) {
 	}
 	if len(s.settings.DNSServers) == 0 {
 		s.settings.DNSServers = DefaultDNSServers()
+	}
+	if err := s.load(&s.rules, s.path("routing.json"), []models.RoutingRule{}); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -345,4 +349,80 @@ func (s *Store) SetDNSServers(servers []string) error {
 	defer s.mu.Unlock()
 	s.settings.DNSServers = append([]string(nil), servers...)
 	return writeJSON(s.path("settings.json"), s.settings)
+}
+
+// ---------- Routing Rules ----------
+
+// RoutingRules returns a copy of all routing rules, sorted by priority.
+func (s *Store) RoutingRules() []models.RoutingRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]models.RoutingRule, len(s.rules))
+	copy(out, s.rules)
+	return out
+}
+
+// RoutingRule returns a single routing rule by ID.
+func (s *Store) RoutingRule(id string) (models.RoutingRule, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, r := range s.rules {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return models.RoutingRule{}, ErrNotFound
+}
+
+// AddRoutingRule appends a routing rule and persists.
+func (s *Store) AddRoutingRule(r models.RoutingRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rules = append(s.rules, r)
+	return s.persistRules()
+}
+
+// UpdateRoutingRule applies fn to the routing rule with the given ID and persists.
+func (s *Store) UpdateRoutingRule(id string, fn func(*models.RoutingRule)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.rules {
+		if s.rules[i].ID == id {
+			fn(&s.rules[i])
+			return s.persistRules()
+		}
+	}
+	return ErrNotFound
+}
+
+// DeleteRoutingRule removes a routing rule by ID and persists.
+func (s *Store) DeleteRoutingRule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.rules[:0]
+	found := false
+	for _, r := range s.rules {
+		if r.ID == id {
+			found = true
+			continue
+		}
+		out = append(out, r)
+	}
+	if !found {
+		return ErrNotFound
+	}
+	s.rules = out
+	return s.persistRules()
+}
+
+// ReplaceRoutingRules replaces all routing rules with a new set and persists.
+func (s *Store) ReplaceRoutingRules(rules []models.RoutingRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rules = append([]models.RoutingRule(nil), rules...)
+	return s.persistRules()
+}
+
+func (s *Store) persistRules() error {
+	return writeJSON(s.path("routing.json"), s.rules)
 }

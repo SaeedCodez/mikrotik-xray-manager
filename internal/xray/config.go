@@ -17,6 +17,10 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	rules := m.buildRoutingRules()
+	rules = append(rules, M{"type": "field", "ip": []interface{}{"geoip:private"}, "outboundTag": "direct"})
+
 	cfg := M{
 		"log": M{"loglevel": "warning"},
 		"dns": M{"servers": toIface(m.DNS())},
@@ -43,9 +47,7 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 		},
 		"routing": M{
 			"domainStrategy": "IPIfNonMatch",
-			"rules": []interface{}{
-				M{"type": "field", "ip": []interface{}{"geoip:private"}, "outboundTag": "direct"},
-			},
+			"rules": rules,
 		},
 	}
 	return json.MarshalIndent(cfg, "", "  ")
@@ -230,4 +232,111 @@ func toIface(ss []string) []interface{} {
 		out[i] = s
 	}
 	return out
+}
+
+// buildRoutingRules converts stored routing rules into Xray routing.rules format.
+func (m *Manager) buildRoutingRules() []interface{} {
+	m.mu.Lock()
+	rules := append([]models.RoutingRule(nil), m.routingRules...)
+	m.mu.Unlock()
+
+	var out []interface{}
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+		rule := M{
+			"type":         "field",
+			"outboundTag":  string(r.Action),
+		}
+
+		switch r.Type {
+		case models.RuleTypeDomain:
+			domains := parseDomainList(r.Condition)
+			if len(domains) > 0 {
+				rule["domain"] = toIface(domains)
+			}
+		case models.RuleTypeIP:
+			ips := parseIPList(r.Condition)
+			if len(ips) > 0 {
+				rule["ip"] = toIface(ips)
+			}
+		case models.RuleTypeGeoIP:
+			geoips := parseGeoIPList(r.Condition)
+			if len(geoips) > 0 {
+				rule["geoip"] = toIface(geoips)
+			}
+		case models.RuleTypeCustom:
+			continue
+		}
+		out = append(out, rule)
+	}
+	return out
+}
+
+// parseDomainList splits domain condition by newlines.
+func parseDomainList(condition string) []string {
+	var domains []string
+	for _, line := range splitLines(condition) {
+		if d := cleanLine(line); d != "" {
+			domains = append(domains, d)
+		}
+	}
+	return domains
+}
+
+// parseIPList splits IP condition by newlines.
+func parseIPList(condition string) []string {
+	var ips []string
+	for _, line := range splitLines(condition) {
+		if ip := cleanLine(line); ip != "" {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
+// parseGeoIPList parses geoip: format (e.g., "geoip:ir", "geoip:us").
+func parseGeoIPList(condition string) []string {
+	var geoips []string
+	for _, line := range splitLines(condition) {
+		if g := cleanLine(line); g != "" {
+			if g == "geoip:private" {
+				geoips = append(geoips, "private")
+			} else if len(g) > 7 && g[:6] == "geoip:" {
+				geoips = append(geoips, g[6:])
+			} else {
+				geoips = append(geoips, g)
+			}
+		}
+	}
+	return geoips
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	var current []byte
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, string(current))
+			current = nil
+		} else {
+			current = append(current, s[i])
+		}
+	}
+	if len(current) > 0 {
+		lines = append(lines, string(current))
+	}
+	return lines
+}
+
+func cleanLine(s string) string {
+	var out []byte
+	for _, c := range s {
+		if c == ' ' || c == '\t' || c == '\r' {
+			continue
+		}
+		out = append(out, byte(c))
+	}
+	return string(out)
 }

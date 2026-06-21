@@ -281,6 +281,46 @@
           </div>
         </div>
 
+        <!-- ===== ROUTING ===== -->
+        <div class="panel routing xscroll" x-show="tab==='routing'">
+          <div style="margin-bottom:10px">
+            <h2 class="section-head">Routing Rules</h2>
+            <p class="section-lead">Define which traffic goes direct or through the proxy.</p>
+          </div>
+          <div class="toolbar-2" style="margin-bottom:16px">
+            <button class="btn btn-secondary btn-full" @click="openTemplates()">Load template</button>
+            <button class="btn btn-primary btn-full" @click="openAddRule()">Add rule</button>
+          </div>
+
+          <div class="rules-list">
+            <div class="rules-header" x-show="rules.length > 0">
+              <div class="col-name">Name</div>
+              <div class="col-type">Type</div>
+              <div class="col-action">Action</div>
+              <div class="col-priority">Priority</div>
+              <div class="col-actions"></div>
+            </div>
+
+            <template x-for="r in rules" :key="r.id">
+              <div class="rule-row" :class="{ disabled: !r.enabled }">
+                <div class="col-name" x-text="r.name"></div>
+                <div class="col-type" x-text="r.type"></div>
+                <div class="col-action" :class="'action-' + r.action" x-text="r.action"></div>
+                <div class="col-priority" x-text="r.priority"></div>
+                <div class="col-actions">
+                  <button class="row-btn row-btn-secondary" aria-label="Edit" @click="openEditRule(r.id)">✎</button>
+                  <button class="row-btn row-btn-danger" aria-label="Delete" @click="deleteRule(r.id)">×</button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="empty-state" x-show="rules.length === 0">
+            <i data-lucide="git-branch" class="icon"></i>
+            <p style="margin:12px 0 0">No routing rules yet. Add one to control traffic routing.</p>
+          </div>
+        </div>
+
         <!-- ===== STATUS ===== -->
         <div class="panel status xscroll" x-show="tab==='status'">
           <h2 class="section-head" style="margin-bottom:14px">Status</h2>
@@ -439,6 +479,10 @@
             <span class="nav-icon"><i data-lucide="gauge" class="icon"></i></span>
             <span class="nav-label">Test</span>
           </button>
+          <button class="nav-item" :class="{ active: tab==='routing' }" @click="tab='routing'">
+            <span class="nav-icon"><i data-lucide="git-branch" class="icon"></i></span>
+            <span class="nav-label">Routes</span>
+          </button>
           <button class="nav-item" :class="{ active: tab==='status' }" @click="tab='status'">
             <span class="nav-icon"><i data-lucide="activity" class="icon"></i></span>
             <span class="nav-label">Status</span>
@@ -511,6 +555,98 @@
           <button class="row-btn row-btn-secondary" @click="deleteSub(true)">Keep the proxies</button>
           <button class="row-btn row-btn-danger" @click="deleteSub(false)">Delete subscription &amp; its proxies</button>
           <button class="modal-cancel" @click="closeModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Add/Edit Routing Rule Modal -->
+  <template x-if="modal === 'ruleForm'">
+    <div class="modal-scrim bottom" @click="closeModal()">
+      <div class="modal-sheet" @click.stop>
+        <h3 class="modal-title" x-text="editingRuleId ? 'Edit Rule' : 'Add Routing Rule'"></h3>
+        <p class="modal-sub">Route specific traffic to direct, proxy, or block.</p>
+
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">Name</label>
+          <div class="field-box">
+            <input class="field-input" placeholder="e.g. Iran Direct" x-model="ruleForm.name">
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">Condition Type</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="radio" name="type" value="domain" x-model="ruleForm.type" style="cursor:pointer"> Domains
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="radio" name="type" value="ip" x-model="ruleForm.type" style="cursor:pointer"> IPs
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="radio" name="type" value="geoip" x-model="ruleForm.type" style="cursor:pointer"> GeoIP
+            </label>
+          </div>
+          <textarea class="textarea" placeholder="One per line, e.g.:&#10;google.com&#10;geoip:ir" rows="4" x-model="ruleForm.condition"></textarea>
+          <p style="margin:6px 0 0;font-size:12px;color:#666">Format: domain names, IPs/CIDR, or geoip:XX</p>
+        </div>
+
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">Action</label>
+          <div style="display:flex;gap:12px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex:1">
+              <input type="radio" name="action" value="direct" x-model="ruleForm.action" style="cursor:pointer">
+              <span style="font-weight:500;color:#00a82e">→ Direct</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex:1">
+              <input type="radio" name="action" value="proxy" x-model="ruleForm.action" style="cursor:pointer">
+              <span style="font-weight:500;color:#0066ff">→ Proxy</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;flex:1">
+              <input type="radio" name="action" value="block" x-model="ruleForm.action" style="cursor:pointer">
+              <span style="font-weight:500;color:#cc0000">→ Block</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">Priority</label>
+          <div class="field-box">
+            <input type="number" class="field-input" placeholder="0" x-model.number="ruleForm.priority">
+          </div>
+          <p style="margin:6px 0 0;font-size:12px;color:#666">Lower number = earlier evaluation</p>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="closeModal()">Cancel</button>
+          <button class="btn btn-primary" @click="saveRule()">Save Rule</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Templates Modal -->
+  <template x-if="modal === 'templates'">
+    <div class="modal-scrim bottom" @click="closeModal()">
+      <div class="modal-sheet" @click.stop>
+        <h3 class="modal-title">Rule Templates</h3>
+        <p class="modal-sub">Choose a template to get started quickly.</p>
+        <div class="templates-list">
+          <button class="template-card" @click="loadTemplate('iran_direct')">
+            <div class="template-name">Iran IPs Direct</div>
+            <div class="template-desc">geoip:ir → direct</div>
+          </button>
+          <button class="template-card" @click="loadTemplate('block_ads')">
+            <div class="template-name">Block Ads &amp; Trackers</div>
+            <div class="template-desc">Common ad domains → block</div>
+          </button>
+          <button class="template-card" @click="loadTemplate('us_proxy')">
+            <div class="template-name">US Streaming via Proxy</div>
+            <div class="template-desc">geoip:us → proxy</div>
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-full" @click="closeModal()">Cancel</button>
         </div>
       </div>
     </div>

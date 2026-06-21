@@ -799,3 +799,44 @@ html, body { overflow: hidden; overscroll-behavior: none; }
 .count-label { margin: 0 2px 10px; }
 .section-lead { margin: 0 2px 14px; color: var(--text-muted); font-size: 14px; }
 .section-head { margin: 0 2px 4px; }
+
+/* --- Routing Rules --- */
+.rules-list { display: flex; flex-direction: column; gap: 8px; }
+.rules-header {
+  display: grid; grid-template-columns: 1fr 80px 90px 80px 100px; gap: 12px;
+  padding: 10px 12px; background: var(--bg-sunken); border-radius: 6px;
+  font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+}
+.col-name { min-width: 0; }
+.col-type { text-align: center; }
+.col-action { text-align: center; }
+.col-priority { text-align: center; }
+.col-actions { text-align: right; }
+
+.rule-row {
+  display: grid; grid-template-columns: 1fr 80px 90px 80px 100px; gap: 12px;
+  align-items: center; padding: 12px; background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: 6px; font-size: 14px;
+}
+.rule-row.disabled { opacity: 0.6; }
+.rule-row .col-name { font-weight: 500; min-width: 0; }
+.rule-row .col-type { font-size: 12px; color: var(--text-muted); text-align: center; }
+.rule-row .col-action {
+  font-weight: 600; font-size: 13px; text-align: center;
+  padding: 4px 8px; border-radius: 4px; width: fit-content; margin: 0 auto;
+}
+.rule-row .action-direct { color: var(--success); background: var(--success-soft); }
+.rule-row .action-proxy { color: var(--info); background: var(--info-soft); }
+.rule-row .action-block { color: var(--danger); background: var(--danger-soft); }
+.rule-row .col-priority { text-align: center; color: var(--text-muted); }
+.rule-row .col-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* Template cards */
+.templates-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.template-card {
+  padding: 12px; border: 1px solid var(--border-default); border-radius: 6px;
+  background: var(--bg-surface); cursor: pointer; text-align: left; width: 100%;
+}
+.template-card:hover { border-color: var(--border-focus); background: var(--bg-hover); }
+.template-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.template-desc { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }

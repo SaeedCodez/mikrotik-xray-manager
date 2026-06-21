@@ -33,12 +33,13 @@ type Manager struct {
 	socksPort  int
 	httpPort   int
 
-	mu         sync.Mutex
-	cmd        *exec.Cmd
-	activeID   string
-	startTime  time.Time
-	running    bool
-	dnsServers []string
+	mu           sync.Mutex
+	cmd          *exec.Cmd
+	activeID     string
+	startTime    time.Time
+	running      bool
+	dnsServers   []string
+	routingRules []models.RoutingRule
 
 	logMu sync.Mutex
 	logs  []string
@@ -76,6 +77,20 @@ func (m *Manager) DNS() []string {
 		return []string{"1.1.1.1", "1.0.0.1", "8.8.8.8"}
 	}
 	return append([]string(nil), m.dnsServers...)
+}
+
+// SetRoutingRules replaces the routing rules baked into generated configs.
+func (m *Manager) SetRoutingRules(rules []models.RoutingRule) {
+	m.mu.Lock()
+	m.routingRules = append([]models.RoutingRule(nil), rules...)
+	m.mu.Unlock()
+}
+
+// RoutingRules returns a copy of the configured routing rules.
+func (m *Manager) RoutingRules() []models.RoutingRule {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]models.RoutingRule(nil), m.routingRules...)
 }
 
 // BinaryAvailable reports whether the xray binary can be found/executed.

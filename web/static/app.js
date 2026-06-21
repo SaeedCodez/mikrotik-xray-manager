@@ -7,7 +7,7 @@
  */
 
 // Tabs that can appear in the URL hash (#proxies, #test, …).
-const TABS = ["proxies", "subs", "test", "status"];
+const TABS = ["proxies", "subs", "test", "routing", "status"];
 
 function xrayApp() {
   return {
@@ -49,6 +49,11 @@ function xrayApp() {
     // --- connection test ---
     conn: { url: "", running: false, result: null, error: "" },
     connHeadersOpen: false,
+
+    // --- routing rules ---
+    rules: [],
+    editingRuleId: null,
+    ruleForm: { name: "", type: "domain", condition: "", action: "direct", priority: 0 },
 
     // ===================================================================
     // lifecycle
@@ -146,7 +151,7 @@ function xrayApp() {
     },
 
     async loadAll() {
-      await Promise.all([this.loadProxies(), this.loadSubs(), this.loadStatus(), this.loadDNS()]);
+      await Promise.all([this.loadProxies(), this.loadSubs(), this.loadStatus(), this.loadDNS(), this.loadRules()]);
     },
     async loadProxies() {
       try {
@@ -208,6 +213,83 @@ function xrayApp() {
         this.pushToast({ tone: "warning", title: "Couldn't save DNS", message: e.message });
       } finally {
         this.dnsSaving = false;
+      }
+    },
+
+    // ===================================================================
+    // routing rules
+    // ===================================================================
+    async loadRules() {
+      try {
+        this.rules = await this.api("GET", "/api/routing/rules") || [];
+      } catch (e) { this.pushToast({ tone: "warning", title: "Couldn't load rules", message: e.message }); }
+    },
+
+    openAddRule() {
+      this.editingRuleId = null;
+      this.ruleForm = { name: "", type: "domain", condition: "", action: "direct", priority: this.rules.length };
+      this.modal = "ruleForm";
+    },
+
+    openEditRule(id) {
+      const rule = this.rules.find((r) => r.id === id);
+      if (rule) {
+        this.editingRuleId = id;
+        this.ruleForm = { ...rule };
+        this.modal = "ruleForm";
+      }
+    },
+
+    async saveRule() {
+      if (!this.ruleForm.name.trim()) {
+        this.pushToast({ tone: "warning", title: "Enter a rule name" });
+        return;
+      }
+      if (!this.ruleForm.condition.trim()) {
+        this.pushToast({ tone: "warning", title: "Enter a condition" });
+        return;
+      }
+
+      try {
+        if (this.editingRuleId) {
+          await this.api("PUT", "/api/routing/rules/" + this.editingRuleId, this.ruleForm);
+          this.pushToast({ tone: "success", title: "Rule updated" });
+        } else {
+          await this.api("POST", "/api/routing/rules", this.ruleForm);
+          this.pushToast({ tone: "success", title: "Rule added" });
+        }
+        await this.loadRules();
+        this.closeModal();
+      } catch (e) {
+        this.pushToast({ tone: "warning", title: "Couldn't save rule", message: e.message });
+      }
+    },
+
+    async deleteRule(id) {
+      if (!confirm("Delete this rule?")) return;
+      try {
+        await this.api("DELETE", "/api/routing/rules/" + id);
+        this.pushToast({ tone: "success", title: "Rule deleted" });
+        await this.loadRules();
+      } catch (e) {
+        this.pushToast({ tone: "warning", title: "Couldn't delete rule", message: e.message });
+      }
+    },
+
+    openTemplates() {
+      this.modal = "templates";
+    },
+
+    loadTemplate(tpl) {
+      const templates = {
+        iran_direct: { name: "Iran IPs Direct", type: "geoip", condition: "geoip:ir", action: "direct", priority: 0 },
+        block_ads: { name: "Block Ads & Trackers", type: "domain", condition: "doubleclick.net\ngoogle-analytics.com\nfacebook.com/en_US/fbevents.js", action: "block", priority: 1 },
+        us_proxy: { name: "US Streaming via Proxy", type: "geoip", condition: "geoip:us", action: "proxy", priority: 2 },
+      };
+      if (templates[tpl]) {
+        this.ruleForm = { ...templates[tpl] };
+        this.editingRuleId = null;
+        this.modal = "ruleForm";
       }
     },
 

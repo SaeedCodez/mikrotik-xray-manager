@@ -71,3 +71,34 @@ type Settings struct {
 	// "https://1.1.1.1/dns-query" or "tcp://8.8.8.8".
 	DNSServers []string `json:"dnsServers"`
 }
+
+// RoutingRuleType defines the condition type for a routing rule.
+type RoutingRuleType string
+
+const (
+	RuleTypeDomain  RoutingRuleType = "domain"
+	RuleTypeIP      RoutingRuleType = "ip"
+	RuleTypeGeoIP   RoutingRuleType = "geoip"
+	RuleTypeCustom  RoutingRuleType = "custom"
+)
+
+// RoutingAction defines where matched traffic is routed.
+type RoutingAction string
+
+const (
+	ActionDirect RoutingAction = "direct"
+	ActionProxy  RoutingAction = "proxy"
+	ActionBlock  RoutingAction = "block"
+)
+
+// RoutingRule defines a traffic routing rule for Xray.
+type RoutingRule struct {
+	ID        string          `json:"id"`        // UUID
+	Name      string          `json:"name"`      // Display name
+	Priority  int             `json:"priority"`  // Evaluation order (lower = earlier)
+	Type      RoutingRuleType `json:"type"`      // Condition type
+	Condition string          `json:"condition"` // Domain list, IP CIDR, geoip:xx, or custom field
+	Action    RoutingAction   `json:"action"`    // direct, proxy, or block
+	Enabled   bool            `json:"enabled"`   // Can disable without deleting
+	CreatedAt time.Time       `json:"createdAt"`
+}

@@ -41,6 +41,9 @@ func main() {
 	// Restore persisted DNS settings so generated configs match the UI.
 	xrayMgr.SetDNS(store.Settings().DNSServers)
 
+	// Restore persisted routing rules so generated configs match the UI.
+	xrayMgr.SetRoutingRules(store.RoutingRules())
+
 	// Restore last-known active proxy into the manager for status display.
 	if active := store.Active().ProxyID; active != "" {
 		xrayMgr.SetActiveID(active)

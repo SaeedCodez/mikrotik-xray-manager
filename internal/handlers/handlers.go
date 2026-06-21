@@ -73,6 +73,12 @@ func (a *App) Handler() http.Handler {
 	api.HandleFunc("GET /api/xray/dns", a.GetDNS)
 	api.HandleFunc("PUT /api/xray/dns", a.UpdateDNS)
 
+	api.HandleFunc("GET /api/routing/rules", a.ListRules)
+	api.HandleFunc("POST /api/routing/rules", a.CreateRule)
+	api.HandleFunc("PUT /api/routing/rules/{id}", a.UpdateRule)
+	api.HandleFunc("DELETE /api/routing/rules/{id}", a.DeleteRule)
+	api.HandleFunc("POST /api/routing/rules/reorder", a.ReorderRules)
+
 	api.HandleFunc("POST /api/connection/test", a.TestConnection)
 
 	mux.Handle("/api/", a.auth.Middleware(api))
