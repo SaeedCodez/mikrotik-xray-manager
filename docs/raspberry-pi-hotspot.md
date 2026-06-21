@@ -286,8 +286,24 @@ iptables -t nat -C PREROUTING -i "$WIFI" -p tcp --dport 53 -j REDIRECT --to-port
 iptables -t nat -C PREROUTING -i "$WIFI" -p tcp -j XROUTER 2>/dev/null \
   || iptables -t nat -A PREROUTING -i "$WIFI" -p tcp -j XROUTER
 
-iptables -C FORWARD -i "$WIFI" -j DROP 2>/dev/null \
-  || iptables -I FORWARD 1 -i "$WIFI" -j DROP
+# FORWARD: allow clients to reach the Docker-published web panel, drop the rest.
+# Published ports (e.g. panel :8080) are DNAT'd to the container, so they traverse
+# FORWARD (in=wlan0, out=docker bridge) instead of INPUT. Allow that flow + its
+# established return, then drop all other wlan0 forwarding (no direct/UDP leak).
+PANEL_PORT=8080
+DOCKER_SUBNETS="$(ip -o -4 addr show | awk '$2 ~ /^(docker0|br-)/ {print $4}')"
+iptables -D FORWARD -o "$WIFI" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+for sub in $DOCKER_SUBNETS; do
+  iptables -D FORWARD -i "$WIFI" -p tcp -d "$sub" --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null || true
+done
+iptables -D FORWARD -i "$WIFI" -j DROP 2>/dev/null || true
+# Re-insert at top in reverse order -> final: [return] [client->panel] [drop rest]
+iptables -I FORWARD 1 -i "$WIFI" -j DROP
+for sub in $DOCKER_SUBNETS; do
+  iptables -I FORWARD 1 -i "$WIFI" -p tcp -d "$sub" --dport "$PANEL_PORT" -j ACCEPT
+done
+iptables -I FORWARD 1 -o "$WIFI" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
 iptables -C INPUT -p tcp --dport "$RP" ! -i "$WIFI" -j DROP 2>/dev/null \
   || iptables -A INPUT -p tcp --dport "$RP" ! -i "$WIFI" -j DROP
 ip6tables -C FORWARD -i "$WIFI" -j DROP 2>/dev/null \
@@ -375,6 +391,7 @@ sudo ss -tnp state established '( dport = :10808 )' | grep -c redsocks
 | Symptom | Check |
 |---|---|
 | Clients connect but no internet | Is xray-core egressing? `curl --socks5-hostname 127.0.0.1:10808 https://api.ipify.org`. If not, start/select a proxy in the `:8080` UI. |
+| Web panel `http://10.42.0.1:8080` won't open from a client (but SSH works) | The panel is a **Docker** container: requests to `:8080` are DNAT'd to the container, so they hit `FORWARD` (not `INPUT` like SSH) and get caught by the `-i wlan0 -j DROP` leak guard. The firewall opens a hole for the panel — confirm `iptables -S FORWARD` shows the `--dport 8080 -j ACCEPT` rules **above** the `-i wlan0 -j DROP`. Re-run `sudo systemctl restart xrouter-firewall` if missing (e.g. after the Docker bridge subnet changed). |
 | `redsocks` logs `accept: backing off` | fd exhaustion — confirm the `LimitNOFILE=65536` drop-in: `cat /proc/$(pidof redsocks)/limits \| grep 'open files'`. |
 | AP not visible | `systemctl status hostapd`; ensure `wpa_supplicant` is disabled and `rfkill list` shows wlan not blocked. |
 | DNS fails | `journalctl -u dns-over-socks`; verify it listens on `127.0.0.1:5354` and socks5 egresses. |
