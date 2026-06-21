@@ -19,7 +19,7 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	}
 
 	rules := m.buildRoutingRules()
-	rules = append(rules, M{"type": "field", "geoip": []interface{}{"private"}, "outboundTag": "direct"})
+	rules = append(rules, M{"type": "field", "ip": []interface{}{"geoip:private"}, "outboundTag": "direct"})
 
 	cfg := M{
 		"log": M{"loglevel": "warning"},
@@ -267,7 +267,7 @@ func (m *Manager) buildRoutingRules() []interface{} {
 		case models.RuleTypeGeoIP:
 			geoips := parseGeoIPList(r.Condition)
 			if len(geoips) > 0 {
-				rule["geoip"] = toIface(geoips)
+				rule["ip"] = toIface(geoips)
 				hasCondition = true
 			}
 		case models.RuleTypeCustom:
@@ -303,17 +303,19 @@ func parseIPList(condition string) []string {
 	return ips
 }
 
-// parseGeoIPList parses geoip: format (e.g., "geoip:ir", "geoip:us").
+// parseGeoIPList parses geoip codes and returns them in Xray format (geoip:xx).
 func parseGeoIPList(condition string) []string {
 	var geoips []string
 	for _, line := range splitLines(condition) {
 		if g := cleanLine(line); g != "" {
-			if g == "geoip:private" {
-				geoips = append(geoips, "private")
-			} else if len(g) > 7 && g[:6] == "geoip:" {
-				geoips = append(geoips, g[6:])
-			} else {
+			if g == "private" || g == "geoip:private" {
+				geoips = append(geoips, "geoip:private")
+			} else if len(g) > 6 && g[:6] == "geoip:" {
 				geoips = append(geoips, g)
+			} else if len(g) == 2 {
+				geoips = append(geoips, "geoip:"+g)
+			} else {
+				geoips = append(geoips, "geoip:"+g)
 			}
 		}
 	}
