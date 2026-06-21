@@ -247,6 +247,11 @@ html, body { overflow: hidden; overscroll-behavior: none; }
 .btn-danger:hover { background: #9c4c44; border-color: #9c4c44; }
 .btn .icon { width: 16px; height: 16px; }
 
+/* Lucide re-creates icon <svg> nodes on every DOM mutation; making them
+   transparent to pointer events keeps clicks landing on the parent button
+   even if the icon node is swapped mid-click. */
+.icon, .chev { pointer-events: none; }
+
 /* ===========================================================================
    Inputs (Ghab Input / Textarea)
    =========================================================================== */
