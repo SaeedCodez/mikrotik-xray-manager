@@ -19,7 +19,7 @@ func (m *Manager) GenerateConfig(p *models.Proxy) ([]byte, error) {
 	}
 
 	rules := m.buildRoutingRules()
-	rules = append(rules, M{"type": "field", "ip": []interface{}{"geoip:private"}, "outboundTag": "direct"})
+	rules = append(rules, M{"type": "field", "geoip": []interface{}{"private"}, "outboundTag": "direct"})
 
 	cfg := M{
 		"log": M{"loglevel": "warning"},
@@ -250,26 +250,33 @@ func (m *Manager) buildRoutingRules() []interface{} {
 			"outboundTag":  string(r.Action),
 		}
 
+		hasCondition := false
 		switch r.Type {
 		case models.RuleTypeDomain:
 			domains := parseDomainList(r.Condition)
 			if len(domains) > 0 {
 				rule["domain"] = toIface(domains)
+				hasCondition = true
 			}
 		case models.RuleTypeIP:
 			ips := parseIPList(r.Condition)
 			if len(ips) > 0 {
 				rule["ip"] = toIface(ips)
+				hasCondition = true
 			}
 		case models.RuleTypeGeoIP:
 			geoips := parseGeoIPList(r.Condition)
 			if len(geoips) > 0 {
 				rule["geoip"] = toIface(geoips)
+				hasCondition = true
 			}
 		case models.RuleTypeCustom:
 			continue
 		}
-		out = append(out, rule)
+
+		if hasCondition {
+			out = append(out, rule)
+		}
 	}
 	return out
 }
